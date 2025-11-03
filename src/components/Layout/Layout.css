@@ -1,0 +1,81 @@
+.dashboard-layout {
+  display: flex;
+  height: 100vh;
+  font-family: "Segoe UI", sans-serif;
+  color: #333;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 250px;
+  background-color: #F4C430;
+  color: rgb(8, 8, 8);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 0;
+  box-shadow: 3px 0 10px rgba(0, 0, 0, 0.1);
+  position: fixed;
+  height: 100vh;
+}
+
+.sidebar-logo {
+  text-align: center;
+  font-weight: bold;
+  margin-bottom: 30px;
+  font-size: 1.2rem;
+  letter-spacing: 0.5px;
+}
+
+.sidebar nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sidebar nav ul li {
+  padding: 12px 25px;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 0.95rem;
+}
+
+.sidebar nav ul li:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar nav ul li.active {
+  background-color: white;
+  color: #000000;
+  font-weight: 600;
+  border-radius: 8px 0 0 8px;
+}
+
+.submenu-title {
+  padding: 10px 25px 5px;
+  font-weight: 600;
+  opacity: 0.9;
+  font-size: 1rem;
+}
+
+/* Conteúdo principal */
+.dashboard-content {
+  margin-left: 250px;
+  width: calc(100% - 250px);
+  padding: 30px;
+  background-color: #f8f9fc;
+  overflow-y: auto;
+}
+
+.content-placeholder {
+  background: white;
+  border-radius: 10px;
+  padding: 40px;
+  text-align: center;
+  font-size: 1.3rem;
+  color: #555;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.blue{
+  font-size: 0.8rem;
+}
