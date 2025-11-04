@@ -11,46 +11,38 @@ import "./DRE.css";
 
 /**
  * DRE Dashboard B&C — Indicadores em Destaque + Projeção + Gráficos + Config
- *
- * Requisitos implementados:
- * - Margem Bruta (valor e %) — Lucro Bruto = Receita Líquida – CPV (custos_totais)
- * - Margem Operacional (via EBITDA) — EBITDA/Receita Líquida (% e valor)
- * - Lucro Líquido (valor e %) — Lucro Líquido/Receita Líquida
- * - EBITDA (valor e %) — direto do DRE
- * - Custo fixo / Receita
- * - ROI — Lucro Líquido / Capital Investido (do DRE se existir, senão via aba Config)
- * - Inadimplência do mês e acumulada — (campos opcionais do DRE). Fallback = 0
- * - Prazos médios (pagar/receber) e ciclo de caixa — (campos opcionais do DRE)
- * - Aba Projeções com série projetada (12 meses) a partir de CAGR dos últimos N meses ou taxa definida na aba Config
- * - Aba Config ("Tab de Conf.") para ajustes de supostos/nomes de campos
- * - Link para DRE bruto (se fornecido via prop/variável de ambiente)
+ * Correção: separar Margem Operacional (Lucro Operacional) e EBITDA usando o campo lógico "lucro_operacional".
  */
 
-const CUSTO_COLORS = ["#FFE7A3", "#F4C430", "#C8CBD3"]; // deduções (claro), CPV (dourado), despesas op (cinza)
-const PIE_COLORS   = ["#F4C430", "#BFA22A", "#8C7C1F"];  // tons de dourado
+const PIE_COLORS = ["#F4C430", "#BFA22A", "#8C7C1F"];
 
-const money = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 });
-const percent = (v, d=1) => `${(Number(v) || 0).toFixed(d)}%`;
+const money = (v) =>
+  (Number(v) || 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 0,
+  });
+const percent = (v, d = 1) => `${(Number(v) || 0).toFixed(d)}%`;
 
 export default function DREDashboard({ dreLink }) {
   const { months = [], loading, valueAt } = useDREData();
   const [mes, setMes] = useState(() => months?.[months.length - 1] || null);
-
-  // Estado da UI
   const [tab, setTab] = useState("destaques"); // destaques | projecoes | graficos | config
 
-  // Config persistida (LocalStorage)
+  // Config persistida
   const [config, setConfig] = useState(() => {
     const raw = localStorage.getItem("dre_config_bc");
-    return raw ? JSON.parse(raw) : {
-      taxaProjReceitaPct: 2.0,         // % ao mês (override da projeção automática)
-      usarTaxaManual: false,
-      capitalInvestido: 0,            // usado para ROI se não houver no DRE
-      campoCapitalInvestido: "capital_investido",
-      campoCPV: "custos_totais",      // alias para CPV no CSV
-      campoCustoFixo: "custos_fixos", // se existir, senão estima
-      mesesParaCAGR: 6,               // janelamento para CAGR de projeção
-    };
+    return raw
+      ? JSON.parse(raw)
+      : {
+          taxaProjReceitaPct: 2.0, // % ao mês
+          usarTaxaManual: false,
+          capitalInvestido: 0,
+          campoCapitalInvestido: "capital_investido",
+          campoCPV: "custos_totais",
+          campoCustoFixo: "custos_fixos",
+          mesesParaCAGR: 6,
+        };
   });
 
   useEffect(() => {
@@ -62,118 +54,237 @@ export default function DREDashboard({ dreLink }) {
   }, [months]);
 
   // ---------- Leitura base (mês selecionado) ----------
-  const receitaLiquida = useMemo(() => valueAt("receita_liquida", mes), [mes, valueAt]);
-  const receitaBruta   = useMemo(() => valueAt("faturamento_bruto", mes), [mes, valueAt]);
-  const cpvCampo       = config.campoCPV || "custos_totais";
-  const cpv            = useMemo(() => valueAt(cpvCampo, mes), [mes, valueAt, cpvCampo]);
-  const despesasAdm    = useMemo(() => valueAt("despesas_adm", mes), [mes, valueAt]);
-  const despesasCom    = useMemo(() => valueAt("despesas_comercial", mes), [mes, valueAt]);
-  const despesasLog    = useMemo(() => valueAt("despesas_logistica", mes), [mes, valueAt]);
-  const ebitda         = useMemo(() => valueAt("ebitda", mes), [mes, valueAt]);
-  const lucroLiquido   = useMemo(() => valueAt("lucro_liquido", mes), [mes, valueAt]);
-  const deducoes       = useMemo(() => valueAt("deducoes", mes), [mes, valueAt]);
+  const receitaLiquida = useMemo(
+    () => valueAt("receita_liquida", mes),
+    [mes, valueAt]
+  );
+  const cpvCampo = config.campoCPV || "custos_totais";
+  const cpv = useMemo(() => valueAt(cpvCampo, mes), [mes, valueAt, cpvCampo]);
 
+  const despesasAdm = useMemo(() => valueAt("despesas_adm", mes), [mes, valueAt]);
+  const despesasCom = useMemo(() => valueAt("despesas_comercial", mes), [mes, valueAt]);
+  const despesasLog = useMemo(() => valueAt("despesas_logistica", mes), [mes, valueAt]);
+
+  const ebitda = useMemo(() => valueAt("ebitda", mes), [mes, valueAt]);
+  const lucroOperacional = useMemo(
+    () => valueAt("lucro_operacional", mes), // hook cobre aliases: "lucro operacional (ebit)", "lucro operacional ebit", "ebit"
+    [mes, valueAt]
+  );
+  const lucroLiquido = useMemo(() => valueAt("lucro_liquido", mes), [mes, valueAt]);
+
+  // Indicadores adicionais
+  const inadMes = useMemo(() => valueAt("inadimplencia_mes", mes) || 0, [mes, valueAt]);
+  const inadAcum = useMemo(() => valueAt("inadimplencia_acumulada", mes) || 0, [mes, valueAt]);
+  const prazoPgto = useMemo(
+    () => valueAt("prazo_medio_pagar", mes) || valueAt("pmp", mes) || 0,
+    [mes, valueAt]
+  );
+  const prazoReceb = useMemo(
+    () => valueAt("prazo_medio_receber", mes) || valueAt("pmr", mes) || 0,
+    [mes, valueAt]
+  );
+  const cicloCaixa = useMemo(
+    () => (Number(prazoReceb) || 0) - (Number(prazoPgto) || 0),
+    [prazoReceb, prazoPgto]
+  );
+
+  // Lucro Bruto e Margem Bruta (usa DRE se existir; senão RL - CPV)
+  const lucroBruto = useMemo(() => {
+    const lbDre = valueAt("lucro_bruto", mes);
+    const lb =
+      lbDre || lbDre === 0
+        ? Number(lbDre)
+        : (Number(receitaLiquida) || 0) - (Number(cpv) || 0);
+    return Number.isFinite(lb) ? lb : 0;
+  }, [mes, valueAt, receitaLiquida, cpv]);
+
+  const margemBruta = useMemo(() => {
+    const rl = Number(receitaLiquida) || 0;
+    if (!rl) return 0;
+    const mb = (Number(lucroBruto) || 0) / rl * 100;
+    return Number.isFinite(mb) ? mb : 0;
+  }, [lucroBruto, receitaLiquida]);
+
+  // Margens principais (fórmulas exatas)
+  const margemEbitda = useMemo(
+    () => (receitaLiquida ? ((Number(ebitda) || 0) / receitaLiquida) * 100 : 0),
+    [ebitda, receitaLiquida]
+  );
+  const margemOper = useMemo(
+    () => (receitaLiquida ? ((Number(lucroOperacional) || 0) / receitaLiquida) * 100 : 0),
+    [lucroOperacional, receitaLiquida]
+  );
+  const margemLL = useMemo(
+    () => (receitaLiquida ? ((Number(lucroLiquido) || 0) / receitaLiquida) * 100 : 0),
+    [lucroLiquido, receitaLiquida]
+  );
+
+  // Custos fixos (valor e % da receita)
   const custosFixosVal = useMemo(() => {
     const cf = valueAt(config.campoCustoFixo, mes);
     if (cf || cf === 0) return cf;
-    // fallback: estima custo fixo como despesas operacionais (adm+com+log)
-    return (Number(despesasAdm) || 0) + (Number(despesasCom) || 0) + (Number(despesasLog) || 0);
+    // fallback: despesas operacionais (adm+com+log)
+    return (
+      (Number(despesasAdm) || 0) +
+      (Number(despesasCom) || 0) +
+      (Number(despesasLog) || 0)
+    );
   }, [mes, valueAt, config.campoCustoFixo, despesasAdm, despesasCom, despesasLog]);
 
-  // Indicadores financeiros adicionais (opcionais no DRE)
-  const inadMes       = useMemo(() => valueAt("inadimplencia_mes", mes) || 0, [mes, valueAt]);
-  const inadAcum      = useMemo(() => valueAt("inadimplencia_acumulada", mes) || 0, [mes, valueAt]);
-  const prazoPgto     = useMemo(() => valueAt("prazo_medio_pagar", mes) || valueAt("pmp", mes) || 0, [mes, valueAt]);
-  const prazoReceb    = useMemo(() => valueAt("prazo_medio_receber", mes) || valueAt("pmr", mes) || 0, [mes, valueAt]);
-  const cicloCaixa    = useMemo(() => (Number(prazoReceb) || 0) - (Number(prazoPgto) || 0), [prazoReceb, prazoPgto]);
-
-  // Lucro Bruto e margens
-  const lucroBruto    = useMemo(() => (Number(receitaLiquida) || 0) - (Number(cpv) || 0), [receitaLiquida, cpv]);
-  const margemBruta   = useMemo(() => receitaLiquida ? (lucroBruto / receitaLiquida) * 100 : 0, [lucroBruto, receitaLiquida]);
-  const margemEbitda  = useMemo(() => receitaLiquida ? (ebitda / receitaLiquida) * 100 : 0, [ebitda, receitaLiquida]);
-  const margemLL      = useMemo(() => receitaLiquida ? (lucroLiquido / receitaLiquida) * 100 : 0, [lucroLiquido, receitaLiquida]);
-  const ebitdaPct     = margemEbitda; // alias
-  const custoFixoReceitaPct = useMemo(() => receitaLiquida ? (custosFixosVal / receitaLiquida) * 100 : 0, [custosFixosVal, receitaLiquida]);
+  const custoFixoReceitaPct = useMemo(
+    () => (receitaLiquida ? (custosFixosVal / receitaLiquida) * 100 : 0),
+    [custosFixosVal, receitaLiquida]
+  );
 
   // ROI
-  const capitalDRE    = useMemo(() => valueAt(config.campoCapitalInvestido, mes) || 0, [mes, valueAt, config.campoCapitalInvestido]);
-  const capitalUsado  = Number(capitalDRE) > 0 ? Number(capitalDRE) : Number(config.capitalInvestido) || 0;
-  const roiPct        = useMemo(() => capitalUsado ? (Number(lucroLiquido) / capitalUsado) * 100 : 0, [lucroLiquido, capitalUsado]);
+  const capitalDRE = useMemo(
+    () => valueAt(config.campoCapitalInvestido, mes) || 0,
+    [mes, valueAt, config.campoCapitalInvestido]
+  );
+  const capitalUsado =
+    Number(capitalDRE) > 0 ? Number(capitalDRE) : Number(config.capitalInvestido) || 0;
+  const roiPct = useMemo(
+    () => (capitalUsado ? (Number(lucroLiquido) / capitalUsado) * 100 : 0),
+    [lucroLiquido, capitalUsado]
+  );
 
   // ---------- Séries para gráficos ----------
-  const estruturaData = useMemo(() => months.map((m) => {
-    const ded = valueAt("deducoes", m) || 0;
-    const cus = valueAt(cpvCampo, m) || 0;
-    const despOp = (valueAt("despesas_adm", m) || 0) + (valueAt("despesas_comercial", m) || 0) + (valueAt("despesas_logistica", m) || 0);
-    return {
-      mes: String(m).toUpperCase(),
-      Deducoes: Math.abs(ded),
-      Custos: Math.abs(cus),
-      "Despesas op": Math.abs(despOp),
-    };
-  }), [months, valueAt, cpvCampo]);
+  // Estrutura DRE (Faturamento, EBITDA, EBIT e Geração de Caixa)
+  const estruturaData = useMemo(
+    () =>
+      months.map((m) => {
+        const faturamento =
+          (valueAt("faturamento_bruto", m) || 0) ||
+          (valueAt("receita_liquida", m) || 0);
+        const ebt = valueAt("ebitda", m) || 0;
+        const ebit = valueAt("lucro_operacional", m) || 0; // usa chave lógica
+        const gcx = valueAt("geracao_caixa", m) || 0;
 
-  const receitaCustos = useMemo(() => months.map((m) => ({
-    mes: String(m).toUpperCase(),
-    Receita: valueAt("receita_liquida", m) || 0,
-    "Custos Totais": -(Math.abs(valueAt(cpvCampo, m) || 0)),
-  })), [months, valueAt, cpvCampo]);
+        return {
+          mes: String(m).toUpperCase(),
+          Faturamento: Number(faturamento) || 0,
+          EBITDA: Number(ebt) || 0,
+          EBIT: Number(ebit) || 0,
+          "Geração de Caixa": Number(gcx) || 0,
+        };
+      }),
+    [months, valueAt]
+  );
 
-  const despesasBreak = useMemo(() => ([
-    { nome: "Administrativas", valor: Math.abs(despesasAdm || 0) },
-    { nome: "Comerciais",      valor: Math.abs(despesasCom || 0) },
-    { nome: "Logística",       valor: Math.abs(despesasLog || 0) },
-  ]), [despesasAdm, despesasCom, despesasLog]);
+  const receitaCustos = useMemo(
+    () =>
+      months.map((m) => ({
+        mes: String(m).toUpperCase(),
+        Receita: valueAt("receita_liquida", m) || 0,
+        "Custos Totais": -(Math.abs(valueAt(cpvCampo, m) || 0)),
+      })),
+    [months, valueAt, cpvCampo]
+  );
+
+  const despesasBreak = useMemo(
+    () => [
+      { nome: "Administrativas", valor: Math.abs(despesasAdm || 0) },
+      { nome: "Comerciais", valor: Math.abs(despesasCom || 0) },
+      { nome: "Logística", valor: Math.abs(despesasLog || 0) },
+    ],
+    [despesasAdm, despesasCom, despesasLog]
+  );
 
   const compReceita = useMemo(() => {
     const serv = valueAt("receitas_servicos", mes);
-    const rev  = valueAt("receitas_revenda", mes);
-    const fab  = valueAt("receitas_fabricacao", mes);
+    const rev = valueAt("receitas_revenda", mes);
+    const fab = valueAt("receitas_fabricacao", mes);
     const items = [
       { name: "Serviços", value: Math.max(0, serv || 0) },
-      { name: "Revenda",  value: Math.max(0, rev || 0)  },
+      { name: "Revenda", value: Math.max(0, rev || 0) },
       { name: "Fabricação", value: Math.max(0, fab || 0) },
-    ].filter(i => i.value > 0);
-    return items.length ? items : [{ name: "Receita Líquida", value: Math.max(0, receitaLiquida || 0) }];
+    ].filter((i) => i.value > 0);
+    return items.length
+      ? items
+      : [{ name: "Receita Líquida", value: Math.max(0, receitaLiquida || 0) }];
   }, [mes, valueAt, receitaLiquida]);
 
   // ---------- Projeções ----------
-  const serieReceita = useMemo(() => months.map(m => ({ m, v: Number(valueAt("receita_liquida", m) || 0) })), [months, valueAt]);
+  const serieReceita = useMemo(
+    () => months.map((m) => ({ m, v: Number(valueAt("receita_liquida", m) || 0) })),
+    [months, valueAt]
+  );
+  const serieCustos = useMemo(
+    () => months.map((m) => ({ m, v: Number(valueAt(cpvCampo, m) || 0) })),
+    [months, valueAt, cpvCampo]
+  );
+  const serieDespesas = useMemo(
+    () =>
+      months.map((m) => {
+        const v =
+          (valueAt("despesas_adm", m) || 0) +
+          (valueAt("despesas_comercial", m) || 0) +
+          (valueAt("despesas_logistica", m) || 0);
+        return { m, v: Number(v) };
+      }),
+    [months, valueAt]
+  );
 
-  // CAGR dos últimos N meses (se houver volume suficiente)
-  const proj = useMemo(() => {
-    const N = Math.min(Number(config.mesesParaCAGR) || 6, serieReceita.length);
-    const horizon = 12; // projeta 12 meses à frente
+  const projectSerie = (serie, cfg) => {
+    const horizon = 12;
     const out = [];
+    if (!serie.length) return { metodo: "insuficiente", taxaMensal: 0, pontos: out };
 
-    if (config.usarTaxaManual) {
-      const g = (Number(config.taxaProjReceitaPct) || 0) / 100; // taxa mensal
-      const lastV = serieReceita[serieReceita.length - 1]?.v || 0;
-      for (let i = 1; i <= horizon; i++) {
-        out.push({ idx: i, valor: lastV * Math.pow(1 + g, i) });
-      }
+    if (cfg.usarTaxaManual) {
+      const g = (Number(cfg.taxaProjReceitaPct) || 0) / 100;
+      const lastV = serie[serie.length - 1]?.v || 0;
+      for (let i = 1; i <= horizon; i++) out.push(lastV * Math.pow(1 + g, i));
       return { metodo: "taxa-manual", taxaMensal: g * 100, pontos: out };
     }
 
+    const N = Math.min(Number(cfg.mesesParaCAGR) || 6, serie.length);
     if (N >= 2) {
-      const tail = serieReceita.slice(-N);
+      const tail = serie.slice(-N);
       const first = tail[0].v || 0;
-      const last  = tail[tail.length - 1].v || 0;
-      const g = first > 0 ? Math.pow(last / first, 1 / (N - 1)) - 1 : 0; // taxa média mensal
-      for (let i = 1; i <= horizon; i++) {
-        out.push({ idx: i, valor: (last || 0) * Math.pow(1 + g, i) });
-      }
+      const last = tail[tail.length - 1].v || 0;
+      const g = first > 0 ? Math.pow((last || 0) / first, 1 / (N - 1)) - 1 : 0;
+      for (let i = 1; i <= 12; i++) out.push((last || 0) * Math.pow(1 + g, i));
       return { metodo: "cagr", taxaMensal: g * 100, pontos: out };
     }
-    return { metodo: "insuficiente", taxaMensal: 0, pontos: [] };
-  }, [serieReceita, config.usarTaxaManual, config.taxaProjReceitaPct, config.mesesParaCAGR]);
+    return { metodo: "insuficiente", taxaMensal: 0, pontos: out };
+  };
+
+  const proj = useMemo(
+    () => ({
+      receita: projectSerie(serieReceita, config),
+      custos: projectSerie(serieCustos, config),
+      despesas: projectSerie(serieDespesas, config),
+    }),
+    [serieReceita, serieCustos, serieDespesas, config]
+  );
 
   const chartProjData = useMemo(() => {
-    const actual = months.map((m) => ({ label: String(m).toUpperCase(), Receita: valueAt("receita_liquida", m) || 0 }));
-    const baseLabel = months[months.length - 1] ? String(months[months.length - 1]).toUpperCase() : "";
-    const future = proj.pontos.map((p, i) => ({ label: `${baseLabel} +${i+1}m`, Projecao: p.valor }));
+    const actual = months.map((m, idx) => ({
+      label: String(m).toUpperCase(),
+      Receita: serieReceita[idx]?.v || 0,
+      Custos: serieCustos[idx]?.v || 0,
+      Despesas: serieDespesas[idx]?.v || 0,
+    }));
+
+    const baseLabel = months[months.length - 1]
+      ? String(months[months.length - 1]).toUpperCase()
+      : "";
+
+    const future = Array.from({
+      length: Math.max(
+        proj.receita.pontos.length,
+        proj.custos.pontos.length,
+        proj.despesas.pontos.length
+      ),
+    }).map((_, i) => ({
+      label: `${baseLabel} +${i + 1}m`,
+      ReceitaProj: proj.receita.pontos[i] ?? null,
+      CustosProj: proj.custos.pontos[i] ?? null,
+      DespesasProj: proj.despesas.pontos[i] ?? null,
+    }));
+
     return [...actual, ...future];
-  }, [months, valueAt, proj]);
+  }, [months, serieReceita, serieCustos, serieDespesas, proj]);
 
   // ---------- UI ----------
   if (loading) return <div className="dre-loading">Carregando DRE...</div>;
@@ -208,10 +319,10 @@ export default function DREDashboard({ dreLink }) {
 
       {tab === "destaques" && (
         <>
-          {/* Cards com KPI — valor e % lado a lado */}
+          {/* Cards com KPI */}
           <section className="dre-cards dre-cards-grid">
             <div className="dre-card">
-              <h4>Margem Bruta (Comercial)</h4>
+              <h4>Margem Bruta</h4>
               <div className="dre-card-row">
                 <div>
                   <small>Lucro Bruto</small>
@@ -219,18 +330,33 @@ export default function DREDashboard({ dreLink }) {
                 </div>
                 <div className="dre-card-pct">{percent(margemBruta)}</div>
               </div>
-              <p className="dre-note">Lucro Bruto = Receita Líquida – CPV</p>
+              <p className="dre-note">Lucro Bruto ÷ Receita Líquida</p>
             </div>
+
             <div className="dre-card">
-              <h4>Margem Operacional (EBITDA)</h4>
+              <h4>Margem Operacional (EBIT)</h4>
               <div className="dre-card-row">
                 <div>
-                  <small>EBITDA</small>
+                  <small>Lucro Operacional</small>
+                  <div className="dre-card-value">{money(lucroOperacional)}</div>
+                </div>
+                <div className="dre-card-pct">{percent(margemOper)}</div>
+              </div>
+              <p className="dre-note">(Lucro Operacional ÷ Receita Líquida) × 100</p>
+            </div>
+
+            <div className="dre-card">
+              <h4>EBITDA</h4>
+              <div className="dre-card-row">
+                <div>
+                  <small>Valor</small>
                   <div className="dre-card-value">{money(ebitda)}</div>
                 </div>
                 <div className="dre-card-pct">{percent(margemEbitda)}</div>
               </div>
+              <p className="dre-note">EBITDA ÷ Receita Líquida</p>
             </div>
+
             <div className="dre-card">
               <h4>Lucro Líquido</h4>
               <div className="dre-card-row">
@@ -241,6 +367,7 @@ export default function DREDashboard({ dreLink }) {
                 <div className="dre-card-pct">{percent(margemLL)}</div>
               </div>
             </div>
+
             <div className="dre-card">
               <h4>Custo Fixo / Receita</h4>
               <div className="dre-card-row">
@@ -251,6 +378,7 @@ export default function DREDashboard({ dreLink }) {
                 <div className="dre-card-pct">{percent(custoFixoReceitaPct)}</div>
               </div>
             </div>
+
             <div className="dre-card">
               <h4>ROI</h4>
               <div className="dre-card-row">
@@ -262,6 +390,7 @@ export default function DREDashboard({ dreLink }) {
               </div>
               <p className="dre-note">LL ÷ Capital Investido</p>
             </div>
+
             <div className="dre-card">
               <h4>Inadimplência</h4>
               <div className="dre-card-row">
@@ -275,6 +404,7 @@ export default function DREDashboard({ dreLink }) {
                 </div>
               </div>
             </div>
+
             <div className="dre-card">
               <h4>Ciclo de Caixa</h4>
               <div className="dre-card-row">
@@ -286,7 +416,9 @@ export default function DREDashboard({ dreLink }) {
                   <small>PMP (dias)</small>
                   <div className="dre-card-value">{Number(prazoPgto) || 0}</div>
                 </div>
-                <div className={cicloCaixa >= 0 ? "dre-card-pct" : "dre-card-pct negative"}>{(Number(cicloCaixa) || 0)}d</div>
+                <div className={cicloCaixa >= 0 ? "dre-card-pct" : "dre-card-pct negative"}>
+                  {(Number(cicloCaixa) || 0)}d
+                </div>
               </div>
             </div>
           </section>
@@ -296,15 +428,16 @@ export default function DREDashboard({ dreLink }) {
             <div className="dre-panel">
               <h3>Estrutura DRE</h3>
               <ResponsiveContainer width="100%" height={320}>
-                <BarChart data={estruturaData} stackOffset="sign">
+                <BarChart data={estruturaData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="mes" />
                   <YAxis />
                   <Tooltip formatter={(v) => money(v)} />
                   <Legend />
-                  <Bar dataKey="Deducoes" stackId="a" fill={CUSTO_COLORS[0]} />
-                  <Bar dataKey="Custos" stackId="a" fill={CUSTO_COLORS[1]} />
-                  <Bar dataKey="Despesas op" stackId="a" fill={CUSTO_COLORS[2]} />
+                  <Bar dataKey="Faturamento" fill="#F4C430" />
+                  <Bar dataKey="EBITDA" fill="#10b981" />
+                  <Bar dataKey="EBIT" fill="#6366f1" />
+                  <Bar dataKey="Geração de Caixa" fill="#475569" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -360,23 +493,28 @@ export default function DREDashboard({ dreLink }) {
         <section className="dre-grid single">
           <div className="dre-panel">
             <div className="dre-panel-head">
-              <h3>Projeção de Receita (12 meses)</h3>
+              <h3>Projeção (12 meses)</h3>
               <div className="dre-badge">
-                {proj.metodo === "taxa-manual" ? `Taxa manual: ${percent(proj.taxaMensal, 1)}` :
-                 proj.metodo === "cagr" ? `CAGR(${config.mesesParaCAGR}m): ${percent(proj.taxaMensal, 1)}` :
-                 "Sem dados para projetar"}
+                {config.usarTaxaManual
+                  ? `Taxa manual: ${percent(config.taxaProjReceitaPct, 1)}`
+                  : `CAGR(${config.mesesParaCAGR}m): ${percent(proj.receita.taxaMensal, 1)}`}
               </div>
             </div>
-            <ResponsiveContainer width="100%" height={400}>
+
+            <ResponsiveContainer width="100%" height={420}>
               <AreaChart data={chartProjData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="colA" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="gReceita" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#16a34a" stopOpacity={0.6}/>
                     <stop offset="95%" stopColor="#16a34a" stopOpacity={0}/>
                   </linearGradient>
-                  <linearGradient id="colB" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.6}/>
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                  <linearGradient id="gCustos" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.5}/>
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="gDespesas" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#475569" stopOpacity={0.4}/>
+                    <stop offset="95%" stopColor="#475569" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -384,8 +522,16 @@ export default function DREDashboard({ dreLink }) {
                 <YAxis />
                 <Tooltip formatter={(v) => money(v)} />
                 <Legend />
-                <Area type="monotone" dataKey="Receita" stroke="#16a34a" fillOpacity={1} fill="url(#colA)" />
-                <Area type="monotone" dataKey="Projecao" stroke="#3b82f6" strokeDasharray="5 5" fillOpacity={1} fill="url(#colB)" />
+
+                {/* histórico */}
+                <Area type="monotone" dataKey="Receita"  stroke="#16a34a" fill="url(#gReceita)" />
+                <Area type="monotone" dataKey="Custos"   stroke="#f59e0b" fill="url(#gCustos)" />
+                <Area type="monotone" dataKey="Despesas" stroke="#475569" fill="url(#gDespesas)" />
+
+                {/* projeções (tracejado) */}
+                <Area type="monotone" dataKey="ReceitaProj"  stroke="#16a34a" strokeDasharray="6 6" fillOpacity={0} />
+                <Area type="monotone" dataKey="CustosProj"   stroke="#f59e0b" strokeDasharray="6 6" fillOpacity={0} />
+                <Area type="monotone" dataKey="DespesasProj" stroke="#475569" strokeDasharray="6 6" fillOpacity={0} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -397,26 +543,32 @@ export default function DREDashboard({ dreLink }) {
           <div className="dre-panel">
             <h3>Margens (%) ao longo do tempo</h3>
             <ResponsiveContainer width="100%" height={360}>
-              <LineChart data={months.map((m) => {
-                const rl = valueAt("receita_liquida", m) || 0;
-                const ebt = valueAt("ebitda", m) || 0;
-                const cpvM = valueAt(cpvCampo, m) || 0;
-                const lb  = rl - cpvM;
-                const ll  = valueAt("lucro_liquido", m) || 0;
-                return {
-                  mes: String(m).toUpperCase(),
-                  "Bruta": rl ? (lb/rl)*100 : 0,
-                  "EBITDA": rl ? (ebt/rl)*100 : 0,
-                  "Líquida": rl ? (ll/rl)*100 : 0,
-                };
-              })}>
+              <LineChart
+                data={months.map((m) => {
+                  const rl = Number(valueAt("receita_liquida", m) || 0);
+                  const ebt = Number(valueAt("ebitda", m) || 0);
+                  const cpvM = Number(valueAt(cpvCampo, m) || 0);
+                  const lb = rl - cpvM;
+                  const ll = Number(valueAt("lucro_liquido", m) || 0);
+                  const lo = Number(valueAt("lucro_operacional", m) || 0); // usa chave lógica
+
+                  return {
+                    mes: String(m).toUpperCase(),
+                    "Bruta": rl ? (lb / rl) * 100 : 0,
+                    "Operacional (EBIT)": rl ? (lo / rl) * 100 : 0,
+                    "EBITDA": rl ? (ebt / rl) * 100 : 0,
+                    "Líquida": rl ? (ll / rl) * 100 : 0,
+                  };
+                })}
+              >
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="mes" />
                 <YAxis unit="%" />
                 <Tooltip formatter={(v) => `${Number(v).toFixed(1)}%`} />
                 <Legend />
                 <Line type="monotone" dataKey="Bruta" stroke="#10b981" dot={false} />
-                <Line type="monotone" dataKey="EBITDA" stroke="#6366f1" dot={false} />
+                <Line type="monotone" dataKey="Operacional (EBIT)" stroke="#6366f1" dot={false} />
+                <Line type="monotone" dataKey="EBITDA" stroke="#0ea5e9" dot={false} />
                 <Line type="monotone" dataKey="Líquida" stroke="#f97316" dot={false} />
               </LineChart>
             </ResponsiveContainer>
@@ -432,18 +584,37 @@ export default function DREDashboard({ dreLink }) {
               <fieldset>
                 <legend>Projeção</legend>
                 <label className="row">
-                  <input type="checkbox" checked={config.usarTaxaManual} onChange={e => setConfig({ ...config, usarTaxaManual: e.target.checked })} />
+                  <input
+                    type="checkbox"
+                    checked={config.usarTaxaManual}
+                    onChange={(e) =>
+                      setConfig({ ...config, usarTaxaManual: e.target.checked })
+                    }
+                  />
                   <span>Usar taxa manual em vez de CAGR</span>
                 </label>
                 <label>
                   Taxa manual (% ao mês)
-                  <input type="number" step="0.1" value={config.taxaProjReceitaPct}
-                    onChange={e => setConfig({ ...config, taxaProjReceitaPct: Number(e.target.value) })} />
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={config.taxaProjReceitaPct}
+                    onChange={(e) =>
+                      setConfig({ ...config, taxaProjReceitaPct: Number(e.target.value) })
+                    }
+                  />
                 </label>
                 <label>
                   Meses para CAGR
-                  <input type="number" min={2} max={24} value={config.mesesParaCAGR}
-                    onChange={e => setConfig({ ...config, mesesParaCAGR: Number(e.target.value) })} />
+                  <input
+                    type="number"
+                    min={2}
+                    max={24}
+                    value={config.mesesParaCAGR}
+                    onChange={(e) =>
+                      setConfig({ ...config, mesesParaCAGR: Number(e.target.value) })
+                    }
+                  />
                 </label>
               </fieldset>
 
@@ -451,18 +622,31 @@ export default function DREDashboard({ dreLink }) {
                 <legend>Campos do DRE</legend>
                 <label>
                   Campo CPV / Custos
-                  <input type="text" value={config.campoCPV}
-                    onChange={e => setConfig({ ...config, campoCPV: e.target.value })} />
+                  <input
+                    type="text"
+                    value={config.campoCPV}
+                    onChange={(e) => setConfig({ ...config, campoCPV: e.target.value })}
+                  />
                 </label>
                 <label>
                   Campo Custos Fixos
-                  <input type="text" value={config.campoCustoFixo}
-                    onChange={e => setConfig({ ...config, campoCustoFixo: e.target.value })} />
+                  <input
+                    type="text"
+                    value={config.campoCustoFixo}
+                    onChange={(e) =>
+                      setConfig({ ...config, campoCustoFixo: e.target.value })
+                    }
+                  />
                 </label>
                 <label>
                   Campo Capital Investido
-                  <input type="text" value={config.campoCapitalInvestido}
-                    onChange={e => setConfig({ ...config, campoCapitalInvestido: e.target.value })} />
+                  <input
+                    type="text"
+                    value={config.campoCapitalInvestido}
+                    onChange={(e) =>
+                      setConfig({ ...config, campoCapitalInvestido: e.target.value })
+                    }
+                  />
                 </label>
               </fieldset>
 
@@ -470,8 +654,14 @@ export default function DREDashboard({ dreLink }) {
                 <legend>Capital / ROI (fallback)</legend>
                 <label>
                   Capital Investido (R$)
-                  <input type="number" step="1000" value={config.capitalInvestido}
-                    onChange={e => setConfig({ ...config, capitalInvestido: Number(e.target.value) })} />
+                  <input
+                    type="number"
+                    step="1000"
+                    value={config.capitalInvestido}
+                    onChange={(e) =>
+                      setConfig({ ...config, capitalInvestido: Number(e.target.value) })
+                    }
+                  />
                 </label>
               </fieldset>
             </div>

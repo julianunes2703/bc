@@ -178,6 +178,7 @@ export function useDREData() {
     resultado_financeiro: ["resultado financeiro"],
     impostos_sobre_lucro: ["impostos sobre o lucro"],
     lucro_liquido: ["lucro liquido","lucro liquido =","lucro liquido (=)","lucro liquido (+/-)"],
+    lucro_bruto: ["lucro bruto","lucro bruto (=)"],
     geracao_caixa: ["geracao de caixa","geracao de caixa"],
     inadimplencia_mes: ["inadimplencia do mes","inadimplencia mes","inadimplencia do mês"],
     inadimplencia_acumulada: ["inadimplencia acumulada"],
