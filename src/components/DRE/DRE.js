@@ -150,36 +150,26 @@ export default function DREDashboard({ dreLink }) {
 
   // ---------- Séries para gráficos ----------
   // Estrutura DRE (Faturamento, EBITDA, EBIT e Geração de Caixa)
-  const estruturaData = useMemo(
-    () =>
-      months.map((m) => {
-        const faturamento =
-          (valueAt("faturamento_bruto", m) || 0) ||
-          (valueAt("receita_liquida", m) || 0);
-        const ebt = valueAt("ebitda", m) || 0;
-        const ebit = valueAt("lucro_operacional", m) || 0; // usa chave lógica
-        const gcx = valueAt("geracao_caixa", m) || 0;
 
-        return {
-          mes: String(m).toUpperCase(),
-          Faturamento: Number(faturamento) || 0,
-          EBITDA: Number(ebt) || 0,
-          EBIT: Number(ebit) || 0,
-          "Geração de Caixa": Number(gcx) || 0,
-        };
-      }),
-    [months, valueAt]
-  );
+ const receitaCustos = useMemo(
+  () =>
+    months.map((m) => {
+      const faturamento =
+        (valueAt("faturamento_bruto", m) || 0) ||
+        (valueAt("receita_liquida", m) || 0);
 
-  const receitaCustos = useMemo(
-    () =>
-      months.map((m) => ({
+      return {
         mes: String(m).toUpperCase(),
-        Receita: valueAt("receita_liquida", m) || 0,
-        "Custos Totais": -(Math.abs(valueAt(cpvCampo, m) || 0)),
-      })),
-    [months, valueAt, cpvCampo]
-  );
+        Faturamento: Number(faturamento) || 0,
+        "Custos Totais": Math.abs(Number(valueAt(cpvCampo, m) || 0)),
+        "Despesas Adm.": Math.abs(Number(valueAt("despesas_adm", m) || 0)),
+        "Despesas Comerciais": Math.abs(Number(valueAt("despesas_comercial", m) || 0)),
+        "Despesas Logística": Math.abs(Number(valueAt("despesas_logistica", m) || 0)),
+      };
+    }),
+  [months, valueAt, cpvCampo]
+);
+
 
   const despesasBreak = useMemo(
     () => [
@@ -191,18 +181,33 @@ export default function DREDashboard({ dreLink }) {
   );
 
   const compReceita = useMemo(() => {
-    const serv = valueAt("receitas_servicos", mes);
-    const rev = valueAt("receitas_revenda", mes);
-    const fab = valueAt("receitas_fabricacao", mes);
-    const items = [
-      { name: "Serviços", value: Math.max(0, serv || 0) },
-      { name: "Revenda", value: Math.max(0, rev || 0) },
-      { name: "Fabricação", value: Math.max(0, fab || 0) },
-    ].filter((i) => i.value > 0);
-    return items.length
-      ? items
-      : [{ name: "Receita Líquida", value: Math.max(0, receitaLiquida || 0) }];
-  }, [mes, valueAt, receitaLiquida]);
+  // tenta cobrir variações de nome de campo
+  const mao =
+    valueAt("receita_mao_de_obra", mes) ??
+    valueAt("receitas_mao_de_obra", mes) ??
+    0;
+
+  const loc =
+    valueAt("receita_locacao", mes) ??
+    valueAt("receitas_locacao", mes) ??
+    0;
+
+  const items = [
+    { name: "Mão de obra", value: Math.max(0, Number(mao) || 0) },
+    { name: "Locação",    value: Math.max(0, Number(loc) || 0) },
+  ];
+
+  // se ambas são 0 e existir receita líquida, opcionalmente mostrar um total único
+  const totalMOeLoc = items[0].value + items[1].value;
+  if (totalMOeLoc === 0 && (Number(receitaLiquida) || 0) > 0) {
+    // comente esta seção se quiser *sempre* ver as duas categorias mesmo somando 0
+    return items; // <- deixe assim para manter "Mão de obra" e "Locação" com 0
+    // return [{ name: "Receita Líquida", value: Math.max(0, Number(receitaLiquida) || 0) }];
+  }
+
+  return items;
+}, [mes, valueAt, receitaLiquida]);
+
 
   // ---------- Projeções ----------
   const serieReceita = useMemo(
@@ -224,6 +229,33 @@ export default function DREDashboard({ dreLink }) {
       }),
     [months, valueAt]
   );
+
+  // Tabela Estrutura DRE (linhas = meses; colunas = métricas com Meta/Real)
+      const estruturaTable = useMemo(
+        () =>
+          months.map((m) => {
+            const faturamento =
+              (valueAt("faturamento_bruto", m) || 0) ||
+              (valueAt("receita_liquida", m) || 0);
+            const ebt = valueAt("ebitda", m) || 0;
+            const ebit = valueAt("lucro_operacional", m) || 0;
+            const ll  = valueAt("lucro_liquido", m) || 0;
+
+            return {
+              mes: String(m).toUpperCase(),
+              EBITDA_meta: 0,
+              EBITDA_real: Number(ebt) || 0,
+              EBIT_meta: 0,
+              EBIT_real: Number(ebit) || 0,
+              Faturamento_meta: 0,
+              Faturamento_real: Number(faturamento) || 0,
+              LL_meta: 0,
+              LL_real: Number(ll) || 0,
+            };
+          }),
+        [months, valueAt]
+      );
+
 
   const projectSerie = (serie, cfg) => {
     const horizon = 12;
@@ -296,7 +328,6 @@ export default function DREDashboard({ dreLink }) {
       <div className="dre-toolbar">
         <div className="dre-tabs">
           <button className={tab === "destaques" ? "active" : ""} onClick={() => setTab("destaques")}>Indicadores</button>
-          <button className={tab === "projecoes" ? "active" : ""} onClick={() => setTab("projecoes")}>Projeção</button>
           <button className={tab === "graficos" ? "active" : ""} onClick={() => setTab("graficos")}>Gráficos</button>
           <button className={tab === "config" ? "active" : ""} onClick={() => setTab("config")}>Config</button>
         </div>
@@ -321,29 +352,34 @@ export default function DREDashboard({ dreLink }) {
         <>
           {/* Cards com KPI */}
           <section className="dre-cards dre-cards-grid">
-            <div className="dre-card">
-              <h4>Margem Bruta</h4>
-              <div className="dre-card-row">
-                <div>
-                  <small>Lucro Bruto</small>
-                  <div className="dre-card-value">{money(lucroBruto)}</div>
+              {/* Margem Comercial (zerada) */}
+              <div className="dre-card">
+                <h4>Margem Comercial</h4>
+                <div className="dre-card-row">
+                  <div>
+                    <small>Valor</small>
+                    <div className="dre-card-value">{money(0)}</div>
+                  </div>
+                  <div className="dre-card-pct">{percent(0)}</div>
                 </div>
-                <div className="dre-card-pct">{percent(margemBruta)}</div>
+                <p className="dre-note"></p>
               </div>
-              <p className="dre-note">Lucro Bruto ÷ Receita Líquida</p>
-            </div>
 
-            <div className="dre-card">
-              <h4>Margem Operacional (EBIT)</h4>
-              <div className="dre-card-row">
-                <div>
-                  <small>Lucro Operacional</small>
-                  <div className="dre-card-value">{money(lucroOperacional)}</div>
-                </div>
-                <div className="dre-card-pct">{percent(margemOper)}</div>
-              </div>
-              <p className="dre-note">(Lucro Operacional ÷ Receita Líquida) × 100</p>
-            </div>
+
+            {/* Margem Operacional */}
+                    <div className="dre-card">
+                      <h4>Margem Operacional</h4>
+                      <div className="dre-card-row">
+                        <div>
+                        { /* <small>Lucro Operacional</small>
+                          <div className="dre-card-value">{money(lucroOperacional)}</div>*/}
+                        </div> 
+                        {/* Exibe em % */}
+                        <div className="dre-card-pct  margem-operacional">{percent(margemOper)}</div>
+                      </div>
+                      <p className="dre-note">(Lucro Operacional ÷ Receita Líquida) × 100</p>
+                    </div>
+
 
             <div className="dre-card">
               <h4>EBITDA</h4>
@@ -354,7 +390,7 @@ export default function DREDashboard({ dreLink }) {
                 </div>
                 <div className="dre-card-pct">{percent(margemEbitda)}</div>
               </div>
-              <p className="dre-note">EBITDA ÷ Receita Líquida</p>
+              <p className="dre-note">EBITDA</p>
             </div>
 
             <div className="dre-card">
@@ -368,16 +404,7 @@ export default function DREDashboard({ dreLink }) {
               </div>
             </div>
 
-            <div className="dre-card">
-              <h4>Custo Fixo / Receita</h4>
-              <div className="dre-card-row">
-                <div>
-                  <small>Custos Fixos</small>
-                  <div className="dre-card-value">{money(custosFixosVal)}</div>
-                </div>
-                <div className="dre-card-pct">{percent(custoFixoReceitaPct)}</div>
-              </div>
-            </div>
+
 
             <div className="dre-card">
               <h4>ROI</h4>
@@ -423,40 +450,63 @@ export default function DREDashboard({ dreLink }) {
             </div>
           </section>
 
-          {/* Destaques rápidos */}
-          <section className="dre-grid">
-            <div className="dre-panel">
-              <h3>Estrutura DRE</h3>
-              <ResponsiveContainer width="100%" height={320}>
-                <BarChart data={estruturaData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="mes" />
-                  <YAxis />
-                  <Tooltip formatter={(v) => money(v)} />
-                  <Legend />
-                  <Bar dataKey="Faturamento" fill="#F4C430" />
-                  <Bar dataKey="EBITDA" fill="#10b981" />
-                  <Bar dataKey="EBIT" fill="#6366f1" />
-                  <Bar dataKey="Geração de Caixa" fill="#475569" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+                          
+        {/* Destaques rápidos */}
+      <section className="dre-grid single">
+        <div className="dre-panel">
+          <h3>Estrutura DRE</h3>
 
-            <div className="dre-panel">
-              <h3>Receita x Custos</h3>
-              <ResponsiveContainer width="100%" height={320}>
-                <LineChart data={receitaCustos}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="mes" />
-                  <YAxis />
-                  <Tooltip formatter={(v) => money(v)} />
-                  <Legend />
-                  <Line type="monotone" dataKey="Receita" stroke="#22c55e" dot />
-                  <Line type="monotone" dataKey="Custos Totais" stroke="#ef4444" dot />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
+    {/* tabela responsiva */}
+    <div className="dre-table-wrap">
+      <table className="dre-table dre-table-yellow">
+        {/* controla largura e divisórias por par Meta/Real */}
+        <colgroup>
+          <col style={{ width: "10rem" }} /> {/* Mês */}
+          <col /><col />                     {/* EBITDA meta/real */}
+          <col /><col />                     {/* EBIT meta/real */}
+          <col /><col />                     {/* Faturamento meta/real */}
+          <col /><col />                     {/* LL meta/real */}
+        </colgroup>
+
+        <thead>
+          <tr>
+            <th rowSpan={2} className="th-mes">Mês</th>
+            <th colSpan={2}>EBITDA</th>
+            <th colSpan={2}>EBIT</th>
+            <th colSpan={2}>Faturamento</th>
+            <th colSpan={2}>Lucro Líquido</th>
+          </tr>
+          <tr>
+            <th>Meta</th><th>Real</th>
+            <th>Meta</th><th>Real</th>
+            <th>Meta</th><th>Real</th>
+            <th>Meta</th><th>Real</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {estruturaTable.map((row) => (
+            <tr key={row.mes}>
+              <td className="cell-mes"><strong>{row.mes}</strong></td>
+
+              <td className="num">{money(row.EBITDA_meta)}</td>
+              <td className="num">{money(row.EBITDA_real)}</td>
+
+              <td className="num">{money(row.EBIT_meta)}</td>
+              <td className="num">{money(row.EBIT_real)}</td>
+
+              <td className="num">{money(row.Faturamento_meta)}</td>
+              <td className="num">{money(row.Faturamento_real)}</td>
+
+              <td className="num">{money(row.LL_meta)}</td>
+              <td className="num">{money(row.LL_real)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
 
           <section className="dre-grid">
             <div className="dre-panel">
@@ -473,106 +523,53 @@ export default function DREDashboard({ dreLink }) {
             </div>
 
             <div className="dre-panel">
-              <h3>Composição da Receita</h3>
-              <ResponsiveContainer width="100%" height={320}>
-                <PieChart>
-                  <Tooltip formatter={(v) => money(v)} />
-                  <Pie data={compReceita} dataKey="value" nameKey="name" innerRadius={70} outerRadius={120} paddingAngle={2}>
-                    {compReceita.map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+                    <h3>Composição da Receita</h3>
+                    <ResponsiveContainer width="100%" height={320}>
+                      <PieChart>
+                        <Tooltip formatter={(v) => money(v)} />
+                        <Legend /> {/* <- novo: mostra "Mão de obra" e "Locação" mesmo quando 0 */}
+                        <Pie
+                          data={compReceita}
+                          dataKey="value"
+                          nameKey="name"
+                          innerRadius={70}
+                          outerRadius={120}
+                          paddingAngle={2}
+                        >
+                          {compReceita.map((_, i) => (
+                            <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                </div>
+
           </section>
         </>
       )}
 
-      {tab === "projecoes" && (
-        <section className="dre-grid single">
-          <div className="dre-panel">
-            <div className="dre-panel-head">
-              <h3>Projeção (12 meses)</h3>
-              <div className="dre-badge">
-                {config.usarTaxaManual
-                  ? `Taxa manual: ${percent(config.taxaProjReceitaPct, 1)}`
-                  : `CAGR(${config.mesesParaCAGR}m): ${percent(proj.receita.taxaMensal, 1)}`}
-              </div>
-            </div>
 
-            <ResponsiveContainer width="100%" height={420}>
-              <AreaChart data={chartProjData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="gReceita" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#16a34a" stopOpacity={0.6}/>
-                    <stop offset="95%" stopColor="#16a34a" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="gCustos" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.5}/>
-                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="gDespesas" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#475569" stopOpacity={0.4}/>
-                    <stop offset="95%" stopColor="#475569" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
+      {tab === "graficos" && (
+        <section className="dre-grid single">
+            <div className="dre-panel">
+            <h3>Faturamento x Custos/Despesas</h3>
+            <ResponsiveContainer width="100%" height={320}>
+              <LineChart data={receitaCustos}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                <XAxis dataKey="mes" />
                 <YAxis />
                 <Tooltip formatter={(v) => money(v)} />
                 <Legend />
 
-                {/* histórico */}
-                <Area type="monotone" dataKey="Receita"  stroke="#16a34a" fill="url(#gReceita)" />
-                <Area type="monotone" dataKey="Custos"   stroke="#f59e0b" fill="url(#gCustos)" />
-                <Area type="monotone" dataKey="Despesas" stroke="#475569" fill="url(#gDespesas)" />
-
-                {/* projeções (tracejado) */}
-                <Area type="monotone" dataKey="ReceitaProj"  stroke="#16a34a" strokeDasharray="6 6" fillOpacity={0} />
-                <Area type="monotone" dataKey="CustosProj"   stroke="#f59e0b" strokeDasharray="6 6" fillOpacity={0} />
-                <Area type="monotone" dataKey="DespesasProj" stroke="#475569" strokeDasharray="6 6" fillOpacity={0} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
-      )}
-
-      {tab === "graficos" && (
-        <section className="dre-grid single">
-          <div className="dre-panel">
-            <h3>Margens (%) ao longo do tempo</h3>
-            <ResponsiveContainer width="100%" height={360}>
-              <LineChart
-                data={months.map((m) => {
-                  const rl = Number(valueAt("receita_liquida", m) || 0);
-                  const ebt = Number(valueAt("ebitda", m) || 0);
-                  const cpvM = Number(valueAt(cpvCampo, m) || 0);
-                  const lb = rl - cpvM;
-                  const ll = Number(valueAt("lucro_liquido", m) || 0);
-                  const lo = Number(valueAt("lucro_operacional", m) || 0); // usa chave lógica
-
-                  return {
-                    mes: String(m).toUpperCase(),
-                    "Bruta": rl ? (lb / rl) * 100 : 0,
-                    "Operacional (EBIT)": rl ? (lo / rl) * 100 : 0,
-                    "EBITDA": rl ? (ebt / rl) * 100 : 0,
-                    "Líquida": rl ? (ll / rl) * 100 : 0,
-                  };
-                })}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="mes" />
-                <YAxis unit="%" />
-                <Tooltip formatter={(v) => `${Number(v).toFixed(1)}%`} />
-                <Legend />
-                <Line type="monotone" dataKey="Bruta" stroke="#10b981" dot={false} />
-                <Line type="monotone" dataKey="Operacional (EBIT)" stroke="#6366f1" dot={false} />
-                <Line type="monotone" dataKey="EBITDA" stroke="#0ea5e9" dot={false} />
-                <Line type="monotone" dataKey="Líquida" stroke="#f97316" dot={false} />
+                <Line type="monotone" dataKey="Faturamento" stroke="#22c55e" dot />
+                <Line type="monotone" dataKey="Custos Totais" stroke="#ef4444" dot />
+                <Line type="monotone" dataKey="Despesas Adm." stroke="#f59e0b" dot />
+                <Line type="monotone" dataKey="Despesas Comerciais" stroke="#0ea5e9" dot />
+                <Line type="monotone" dataKey="Despesas Logística" stroke="#6366f1" dot />
               </LineChart>
             </ResponsiveContainer>
           </div>
+
         </section>
       )}
 
