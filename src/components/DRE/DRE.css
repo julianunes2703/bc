@@ -183,7 +183,7 @@
   --dre-yellow-50:  #FFFBEB;
 
   --dre-ink-900: #1f2937;
-  --dre-ink-600: #475569;
+  --dre-ink-600: #a5ae30;
   --dre-ink-300: #cbd5e1;
 
   --dre-border: #ece8d6; /* amarelo bem claro para bordas */
@@ -220,63 +220,7 @@
   border-bottom: 1px solid var(--dre-border);
   padding: 14px 12px;
 }
-.dre-table thead tr:nth-child(2) th {
-  background: var(--dre-yellow-50);
-  color: #7a6b1f;
-  font-weight: 600;
-  text-align: center;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--dre-border);
-}
 
-.dre-table thead .th-mes {
-  text-align: left;
-  min-width: 7rem;
-}
-
-/* Corpo */
-.dre-table tbody td {
-  padding: 12px;
-  border-bottom: 1px solid #f1f5f9;
-  background: #fff;
-}
-.dre-table tbody tr:nth-child(odd) td {
-  background: #fcfcfc; /* zebra sutil */
-}
-
-/* Hover de linha */
-.dre-table tbody tr:hover td {
-  background: var(--dre-hover);
-}
-
-/* Alinhamentos */
-.dre-table .cell-mes { text-align: left; font-weight: 600; letter-spacing: .02em; }
-.dre-table .num { text-align: right; }
-
-/* Divisórias verticais entre blocos (Meta/Real) */
-.dre-table thead tr:nth-child(1) th:nth-child(3),
-.dre-table thead tr:nth-child(2) th:nth-child(3),
-.dre-table tbody td:nth-child(3),
-.dre-table thead tr:nth-child(1) th:nth-child(5),
-.dre-table thead tr:nth-child(2) th:nth-child(5),
-.dre-table tbody td:nth-child(5),
-.dre-table thead tr:nth-child(1) th:nth-child(7),
-.dre-table thead tr:nth-child(2) th:nth-child(7),
-.dre-table tbody td:nth-child(7),
-.dre-table thead tr:nth-child(1) th:nth-child(9),
-.dre-table thead tr:nth-child(2) th:nth-child(9),
-.dre-table tbody td:nth-child(9) {
-  border-left: 1px solid var(--dre-border);
-}
-
-/* Coluna “Mês” sticky para facilitar leitura em tabelas largas */
-.dre-table thead th:first-child,
-.dre-table tbody td:first-child {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  background: inherit; /* mantém zebra/hover */
-}
 
 /* Título do painel com detalhe amarelo */
 .dre-panel > h3 {
