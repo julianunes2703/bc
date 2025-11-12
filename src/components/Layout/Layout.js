@@ -4,6 +4,7 @@ import DREDashboard from "../DRE/DRE";
 
 
 import "./Layout.css";
+import DREAnual from "../DREAnual/DREAnual";
 
 
 export default function DashboardLayout() {
@@ -14,9 +15,11 @@ export default function DashboardLayout() {
       // Financeiro
       case "dre":
         return <DREDashboard />;
+      case "dreAnual":
+        return <DREAnual/>
 
       default:
-        return <DREDashboard />;
+        return <DREAnual/>;
     }
   };
 
@@ -34,10 +37,17 @@ export default function DashboardLayout() {
             {/* Seção Financeiro */}
             <li className="submenu-title"> Financeiro</li>
             <li
+              className={selectedMenu === "dreAnual" ? "active" : ""}
+              onClick={() => setSelectedMenu("dreAnual")}
+            >
+              • DRE Anual
+            </li>
+
+            <li
               className={selectedMenu === "dre" ? "active" : ""}
               onClick={() => setSelectedMenu("dre")}
             >
-              • DRE
+              • DRE por mês
             </li>
           
 

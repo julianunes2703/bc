@@ -5,7 +5,7 @@ import {
   LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend,
   BarChart, Bar,
   PieChart, Pie, Cell,
-  AreaChart, Area
+  AreaChart, Area, ComposedChart
 } from "recharts";
 import "./DRE.css";
 
@@ -328,8 +328,6 @@ export default function DREDashboard({ dreLink }) {
       <div className="dre-toolbar">
         <div className="dre-tabs">
           <button className={tab === "destaques" ? "active" : ""} onClick={() => setTab("destaques")}>Indicadores</button>
-          <button className={tab === "graficos" ? "active" : ""} onClick={() => setTab("graficos")}>Gráficos</button>
-          <button className={tab === "config" ? "active" : ""} onClick={() => setTab("config")}>Config</button>
         </div>
         <div className="dre-select">
           <label>Mês</label>
@@ -450,6 +448,37 @@ export default function DREDashboard({ dreLink }) {
             </div>
           </section>
 
+          <section className="dre-grid single">
+            <div className="dre-panel">
+              <h3>Faturamento × Custos e Despesas</h3>
+              <ResponsiveContainer width="100%" height={340}>
+                <ComposedChart data={receitaCustos}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="mes" />
+                  <YAxis />
+                  <Tooltip formatter={(v) => money(v)} />
+                  <Legend />
+
+                  {/* Barras — Custos e Despesas */}
+                  <Bar dataKey="Custos Totais" fill="#ef4444" name="Custos Totais" />
+                  <Bar dataKey="Despesas Adm." fill="#f59e0b" name="Despesas Adm." />
+                  <Bar dataKey="Despesas Comerciais" fill="#0ea5e9" name="Despesas Comerciais" />
+                  <Bar dataKey="Despesas Logística" fill="#6366f1" name="Despesas Logística" />
+
+                  {/* Linha — Faturamento */}
+                  <Line
+                    type="monotone"
+                    dataKey="Faturamento"
+                    stroke="#22c55e"
+                    strokeWidth={3}
+                    dot={{ r: 3 }}
+                    name="Faturamento"
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+
                           
         {/* Destaques rápidos */}
       <section className="dre-grid single">
@@ -508,6 +537,7 @@ export default function DREDashboard({ dreLink }) {
   </div>
 </section>
 
+
           <section className="dre-grid">
             <div className="dre-panel">
               <h3>Quebra de Despesas</h3>
@@ -546,128 +576,6 @@ export default function DREDashboard({ dreLink }) {
 
           </section>
         </>
-      )}
-
-
-      {tab === "graficos" && (
-        <section className="dre-grid single">
-            <div className="dre-panel">
-            <h3>Faturamento x Custos/Despesas</h3>
-            <ResponsiveContainer width="100%" height={320}>
-              <LineChart data={receitaCustos}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="mes" />
-                <YAxis />
-                <Tooltip formatter={(v) => money(v)} />
-                <Legend />
-
-                <Line type="monotone" dataKey="Faturamento" stroke="#22c55e" dot />
-                <Line type="monotone" dataKey="Custos Totais" stroke="#ef4444" dot />
-                <Line type="monotone" dataKey="Despesas Adm." stroke="#f59e0b" dot />
-                <Line type="monotone" dataKey="Despesas Comerciais" stroke="#0ea5e9" dot />
-                <Line type="monotone" dataKey="Despesas Logística" stroke="#6366f1" dot />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-        </section>
-      )}
-
-      {tab === "config" && (
-        <section className="dre-grid single">
-          <div className="dre-panel">
-            <h3>Configuração (Tab de Conf.)</h3>
-            <div className="dre-form-grid">
-              <fieldset>
-                <legend>Projeção</legend>
-                <label className="row">
-                  <input
-                    type="checkbox"
-                    checked={config.usarTaxaManual}
-                    onChange={(e) =>
-                      setConfig({ ...config, usarTaxaManual: e.target.checked })
-                    }
-                  />
-                  <span>Usar taxa manual em vez de CAGR</span>
-                </label>
-                <label>
-                  Taxa manual (% ao mês)
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={config.taxaProjReceitaPct}
-                    onChange={(e) =>
-                      setConfig({ ...config, taxaProjReceitaPct: Number(e.target.value) })
-                    }
-                  />
-                </label>
-                <label>
-                  Meses para CAGR
-                  <input
-                    type="number"
-                    min={2}
-                    max={24}
-                    value={config.mesesParaCAGR}
-                    onChange={(e) =>
-                      setConfig({ ...config, mesesParaCAGR: Number(e.target.value) })
-                    }
-                  />
-                </label>
-              </fieldset>
-
-              <fieldset>
-                <legend>Campos do DRE</legend>
-                <label>
-                  Campo CPV / Custos
-                  <input
-                    type="text"
-                    value={config.campoCPV}
-                    onChange={(e) => setConfig({ ...config, campoCPV: e.target.value })}
-                  />
-                </label>
-                <label>
-                  Campo Custos Fixos
-                  <input
-                    type="text"
-                    value={config.campoCustoFixo}
-                    onChange={(e) =>
-                      setConfig({ ...config, campoCustoFixo: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Campo Capital Investido
-                  <input
-                    type="text"
-                    value={config.campoCapitalInvestido}
-                    onChange={(e) =>
-                      setConfig({ ...config, campoCapitalInvestido: e.target.value })
-                    }
-                  />
-                </label>
-              </fieldset>
-
-              <fieldset>
-                <legend>Capital / ROI (fallback)</legend>
-                <label>
-                  Capital Investido (R$)
-                  <input
-                    type="number"
-                    step="1000"
-                    value={config.capitalInvestido}
-                    onChange={(e) =>
-                      setConfig({ ...config, capitalInvestido: Number(e.target.value) })
-                    }
-                  />
-                </label>
-              </fieldset>
-            </div>
-
-            <div className="dre-hints">
-              <p>Se algum campo não existir no CSV do DRE, preencha os aliases acima ou valores de fallback.</p>
-            </div>
-          </div>
-        </section>
       )}
     </div>
   );
